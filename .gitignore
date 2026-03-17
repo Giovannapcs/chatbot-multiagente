@@ -1,0 +1,13 @@
+config.env
+.env
+*.env
+!config.env.exemplo
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+*.log
+logs/
+.vscode/
+.DS_Store
+venv/
