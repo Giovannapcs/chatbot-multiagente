@@ -18,15 +18,40 @@ def get_connection():
     return conn
 
 def get_hosts(cur):
+    """Retorna hosts reais (ativos e inativos) — exclui templates."""
     cur.execute("""
         SELECT h.hostid, h.host, h.name, h.status,
                COALESCE(i.ip,'') AS ip,
                COALESCE(i.dns,'') AS dns,
-               COALESCE(i.port,'') AS porta
+               COALESCE(i.port,'') AS porta,
+               CASE WHEN h.status=0 THEN 'ativo' ELSE 'inativo' END AS status_txt
         FROM hosts h
-        LEFT JOIN interface i ON i.hostid=h.hostid AND i.main=1
-        WHERE h.flags=0
-        ORDER BY h.hostid
+        INNER JOIN interface i ON i.hostid=h.hostid AND i.main=1
+        WHERE h.flags = 0
+          AND i.ip IS NOT NULL
+          AND i.ip != ''
+        ORDER BY h.status, h.host
+    """)
+    return cur.fetchall()
+
+def get_host_tags(cur):
+    """
+    Busca todas as tags dos hosts reais.
+    Tags sao metadados em chave=valor (ex: classe=linux, ambiente=producao).
+    """
+    cur.execute("""
+        SELECT h.hostid, h.host, ht.tag, ht.value
+        FROM host_tag ht
+        JOIN hosts h ON h.hostid = ht.hostid
+        WHERE h.flags = 0
+          AND (
+            h.status = 0
+            OR (h.status = 1 AND EXISTS (
+                SELECT 1 FROM interface i
+                WHERE i.hostid = h.hostid AND i.ip != ''
+            ))
+          )
+        ORDER BY h.host, ht.tag
     """)
     return cur.fetchall()
 

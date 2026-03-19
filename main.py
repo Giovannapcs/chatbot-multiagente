@@ -4,11 +4,11 @@ import time, logging, os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-from zabbix_reader import (get_connection, get_hosts, get_groups,
+from zabbix_reader import (get_connection, get_hosts, get_host_tags, get_groups,
                             get_interfaces, get_templates, get_items,
                             get_triggers, get_eventos,
                             get_problemas_ativos, get_metricas_recentes)
-from neo4j_writer  import (get_driver, write_hosts, write_groups,
+from neo4j_writer  import (get_driver, write_hosts, write_host_tags, write_groups,
                             write_interfaces, write_templates,
                             write_items, write_triggers,
                             write_eventos, write_problemas,
@@ -30,6 +30,10 @@ def ciclo(pg_conn, neo4j_driver, desde_ts, primeira):
         hosts = get_hosts(cur)
         write_hosts(s, hosts)
         log.info(f"Hosts: {len(hosts)}")
+
+        tags = get_host_tags(cur)
+        write_host_tags(s, tags)
+        log.info(f"Tags: {len(tags)}")
 
         groups = get_groups(cur)
         write_groups(s, groups)

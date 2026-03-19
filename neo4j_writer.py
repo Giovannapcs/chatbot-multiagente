@@ -17,14 +17,30 @@ def write_hosts(session, hosts):
     for h in hosts:
         session.run("""
             MERGE (host:Host {hostid: $hid})
-            SET host.host=$host, host.name=$name,
-                host.status=$status, host.ip=$ip,
-                host.dns=$dns, host.porta=$porta,
+            SET host.host=$host,
+                host.name=$name,
+                host.status=$status,
+                host.status_txt=$status_txt,
+                host.ip=$ip,
+                host.dns=$dns,
+                host.porta=$porta,
                 host.sync=$sync
         """, hid=h["hostid"], host=h["host"],
              name=h["name"], status=h["status"],
+             status_txt=h["status_txt"],
              ip=h["ip"], dns=h["dns"], porta=h["porta"],
              sync=datetime.now().isoformat())
+
+def write_host_tags(session, tags):
+    """Cria nos :Tag e relacionamento [:TEM_TAG] com o Host."""
+    for t in tags:
+        session.run("""
+            MATCH (h:Host {hostid: $hid})
+            MERGE (tag:Tag {chave: $chave, valor: $valor})
+            MERGE (h)-[:TEM_TAG]->(tag)
+        """, hid=t["hostid"],
+             chave=t["tag"],
+             valor=t["value"] or "")
 
 def write_groups(session, groups):
     for g in groups:
