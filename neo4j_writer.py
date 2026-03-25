@@ -155,3 +155,18 @@ def write_metricas(session, metricas):
         """, uid=uid, clock=m["clock"],
              val=float(m["value"]), tipo=m["tipo"],
              ts=ts, iid=m["itemid"])
+
+
+def write_host_tags(session, tags):
+    """Cria nos :Tag e relacionamento [:TEM_TAG] com o Host."""
+    for t in tags:
+        session.run("""
+            MATCH (h:Host {hostid: $hid})
+            MERGE (tag:Tag {chave: $chave, valor: $valor})
+            SET tag.chave = $chave,
+                tag.valor = $valor
+            MERGE (h)-[:TEM_TAG]->(tag)
+        """,
+        hid=t["hostid"],
+        chave=t["tag"],
+        valor=t["value"] or "")

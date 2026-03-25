@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, psycopg2
+import os, psycopg2, time
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 
@@ -18,7 +18,6 @@ def get_connection():
     return conn
 
 def get_hosts(cur):
-    """Retorna hosts reais (ativos e inativos) — exclui templates."""
     cur.execute("""
         SELECT h.hostid, h.host, h.name, h.status,
                COALESCE(i.ip,'') AS ip,
@@ -27,10 +26,11 @@ def get_hosts(cur):
                CASE WHEN h.status=0 THEN 'ativo' ELSE 'inativo' END AS status_txt
         FROM hosts h
         INNER JOIN interface i ON i.hostid=h.hostid AND i.main=1
-        WHERE h.flags = 0
-          AND i.ip IS NOT NULL
-          AND i.ip != ''
-        ORDER BY h.status, h.host
+        WHERE h.flags = 0 
+          AND h.status IN (0, 1)
+          AND i.ip IS NOT NULL 
+          AND i.ip <> ''
+        ORDER BY h.host
     """)
     return cur.fetchall()
 
@@ -129,25 +129,43 @@ def get_problemas_ativos(cur):
     """)
     return cur.fetchall()
 
-def get_metricas_recentes(cur, limite=5000):
+def get_metricas_recentes(cur, limite=1000):
+    dez_min_atras = int(time.time()) - 600
     cur.execute("""
         SELECT DISTINCT ON (itemid)
                itemid, clock,
                ROUND(value::numeric,4) AS value,
                'float' AS tipo
         FROM history
+        WHERE clock > %s
         ORDER BY itemid, clock DESC
         LIMIT %s
-    """, (limite,))
+    """, (dez_min_atras, limite))
     floats = cur.fetchall()
+
     cur.execute("""
         SELECT DISTINCT ON (itemid)
                itemid, clock,
                value::numeric AS value,
                'uint' AS tipo
         FROM history_uint
+        WHERE clock > %s
         ORDER BY itemid, clock DESC
         LIMIT %s
-    """, (limite,))
+    """, (dez_min_atras, limite))
     uints = cur.fetchall()
+
     return floats + uints
+
+
+def get_host_tags(cur):
+    """Busca tags dos hosts ativos e retorna ligadas ao hostid."""
+    cur.execute("""
+        SELECT h.hostid, h.host, ht.tag, ht.value
+        FROM hosts h
+        JOIN host_tag ht ON h.hostid = ht.hostid
+        WHERE h.flags = 0
+          AND h.status = 0
+        ORDER BY h.host, ht.tag
+    """)
+    return cur.fetchall()
