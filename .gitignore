@@ -12,3 +12,13 @@ logs/
 .DS_Store
 venv/
 .venv/
+*.bkp
+*.bkp2
+*.bkp3
+*.zip
+compara.txt
+test_db.sh
+lambda_deploy/neo4j/
+lambda_deploy/neo4j-*.dist-info/
+lambda_deploy/pytz/
+lambda_deploy/pytz-*.dist-info/
