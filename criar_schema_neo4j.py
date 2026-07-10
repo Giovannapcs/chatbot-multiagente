@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""criar_schema_neo4j.py — Schema otimizado para Zabbix 7.x"""
+"""
+Cria constraints e indices no Neo4j para otimizar as queries do projeto.
+Execute uma vez antes de iniciar a sincronizacao.
+"""
 import os
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
@@ -11,74 +14,79 @@ driver = GraphDatabase.driver(
     auth=(os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASS"))
 )
 
+# Constraints garantem unicidade; indices aceleram buscas por propriedade
 comandos = [
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (h:Host)      REQUIRE h.hostid    IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (g:Grupo)     REQUIRE g.groupid   IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (i:Item)      REQUIRE i.itemid    IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (t:Trigger)   REQUIRE t.triggerid IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (e:Evento)    REQUIRE e.eventid   IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (h:Host)      REQUIRE h.hostid      IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (g:Grupo)     REQUIRE g.groupid     IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (i:Item)      REQUIRE i.itemid      IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (t:Trigger)   REQUIRE t.triggerid   IS UNIQUE",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (e:Evento)    REQUIRE e.eventid     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Interface) REQUIRE n.interfaceid IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Metrica)   REQUIRE m.id        IS UNIQUE",
-    "CREATE INDEX IF NOT EXISTS FOR (h:Host)     ON (h.status)",
-    "CREATE INDEX IF NOT EXISTS FOR (h:Host)     ON (h.host)",
-    "CREATE INDEX IF NOT EXISTS FOR (h:Host)     ON (h.ip)",
-    "CREATE INDEX IF NOT EXISTS FOR (i:Item)     ON (i.key_)",
-    "CREATE INDEX IF NOT EXISTS FOR (i:Item)     ON (i.value_type)",
-    "CREATE INDEX IF NOT EXISTS FOR (t:Trigger)  ON (t.value)",
-    "CREATE INDEX IF NOT EXISTS FOR (t:Trigger)  ON (t.priority)",
-    "CREATE INDEX IF NOT EXISTS FOR (e:Evento)   ON (e.severity)",
-    "CREATE INDEX IF NOT EXISTS FOR (e:Evento)   ON (e.clock)",
-    "CREATE INDEX IF NOT EXISTS FOR (m:Metrica)  ON (m.clock)",
-    "CREATE INDEX IF NOT EXISTS FOR (g:Grupo)    ON (g.name)",
+    "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Metrica)   REQUIRE m.id          IS UNIQUE",
+    "CREATE INDEX IF NOT EXISTS FOR (h:Host)    ON (h.status)",
+    "CREATE INDEX IF NOT EXISTS FOR (h:Host)    ON (h.host)",
+    "CREATE INDEX IF NOT EXISTS FOR (h:Host)    ON (h.ip)",
+    "CREATE INDEX IF NOT EXISTS FOR (i:Item)    ON (i.key_)",
+    "CREATE INDEX IF NOT EXISTS FOR (i:Item)    ON (i.value_type)",
+    "CREATE INDEX IF NOT EXISTS FOR (t:Trigger) ON (t.value)",
+    "CREATE INDEX IF NOT EXISTS FOR (t:Trigger) ON (t.priority)",
+    "CREATE INDEX IF NOT EXISTS FOR (e:Evento)  ON (e.severity)",
+    "CREATE INDEX IF NOT EXISTS FOR (e:Evento)  ON (e.clock)",
+    "CREATE INDEX IF NOT EXISTS FOR (m:Metrica) ON (m.clock)",
+    "CREATE INDEX IF NOT EXISTS FOR (g:Grupo)   ON (g.name)",
 ]
 
+
 def extrair_nome(cmd):
+    """Extrai um nome legivel do comando para exibir no log."""
     partes = cmd.split("(")
-    if "CONSTRAINT" in cmd:
-        try:
+    try:
+        if "CONSTRAINT" in cmd:
             no = partes[1].split(")")[0].strip()
-            propriedade = cmd.split("REQUIRE")[1].strip()
-            return f"{no} → {propriedade}"
-        except IndexError:
-            return cmd[:60]
-    else:
-        try:
+            prop = cmd.split("REQUIRE")[1].strip()
+            return f"{no} -> {prop}"
+        else:
             no = partes[1].split(")")[0].strip()
             campo = partes[2].split(")")[0].strip()
-            return f"{no} → {campo}"
-        except IndexError:
-            return cmd[:60]
+            return f"{no} -> {campo}"
+    except IndexError:
+        return cmd[:60]
+
 
 print("Criando schema no Neo4j...")
-print("="*55)
+print("=" * 55)
+
 with driver.session() as s:
     for cmd in comandos:
         s.run(cmd)
         tipo = "CONSTRAINT" if "CONSTRAINT" in cmd else "INDEX    "
-        nome = extrair_nome(cmd)
-        print(f"  OK [{tipo}]: {nome}")
+        print(f"  OK [{tipo}]: {extrair_nome(cmd)}")
 
-print("="*55)
+print("=" * 55)
 print()
-print("Schema criado! Nos do grafo:")
-print("  :Host       <- hosts")
-print("  :Grupo      <- hstgrp + hosts_groups")
-print("  :Interface  <- interface")
-print("  :Template   <- hosts_templates")
-print("  :Item       <- items + item_discovery")
-print("  :Trigger    <- triggers + functions")
-print("  :Evento     <- events + problem")
-print("  :Metrica    <- history + history_uint")
-print("  :Tendencia  <- trends + trends_uint")
+print("Nos do grafo:")
+for no, origem in [
+    (":Host",      "hosts"),
+    (":Grupo",     "hstgrp + hosts_groups"),
+    (":Interface", "interface"),
+    (":Template",  "hosts_templates"),
+    (":Item",      "items"),
+    (":Trigger",   "triggers + functions"),
+    (":Evento",    "events + problem"),
+    (":Metrica",   "history + history_uint"),
+]:
+    print(f"  {no:<14} <- {origem}")
+
 print()
-print("Relacionamentos:")
-print("  (Host)-[:PERTENCE_A]->(Grupo)")
-print("  (Host)-[:TEM]->(Interface)")
-print("  (Host)-[:USA]->(Template)")
-print("  (Host)-[:TEM_ITEM]->(Item)")
-print("  (Host)-[:TEM_TRIGGER]->(Trigger)")
-print("  (Item)-[:TEM_VALOR]->(Metrica)")
-print("  (Item)-[:TEM_TREND]->(Tendencia)")
-print("  (Trigger)-[:GEROU]->(Evento)")
+print("Relacionamentos principais:")
+for rel in [
+    "(Host)-[:PERTENCE_A]->(Grupo)",
+    "(Host)-[:TEM_TRIGGER]->(Trigger)-[:GEROU]->(Evento)",
+    "(Trigger)-[:GEROU_PROBLEMA]->(Problem)",
+    "(Evento)-[:VIROU_PROBLEMA]->(Problem)",
+    "(Problem)-[:TEM_ACK]->(Acknowledge)",
+    "(Item)-[:TEM_VALOR]->(Metrica)",
+]:
+    print(f"  {rel}")
 
 driver.close()
