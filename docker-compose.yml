@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  neo4j:
+    image: neo4j:5.26.3-community
+    container_name: neo4j
+    env_file:
+      - .env
+    restart: always
+    ports:
+      - "0.0.0.0:7474:7474"
+      - "0.0.0.0:7687:7687"
+    volumes:
+      - /home/ubuntu/neo4j-data:/data
+      - /home/ubuntu/neo4j-logs:/logs
+    environment:
+      NEO4J_AUTH: "neo4j/${NEO4J_PASS}"
+      # Limites de memoria - ESSENCIAL numa instancia t3.small (2GB RAM).
+      # Sem isso, o heap cresce sem controle e o OOM Killer do Linux
+      # mata o processo Neo4j periodicamente (ja aconteceu varias vezes).
+      NEO4J_server_memory_heap_initial__size: "512m"
+      NEO4J_server_memory_heap_max__size: "512m"
+      NEO4J_server_memory_pagecache_size: "256M"
